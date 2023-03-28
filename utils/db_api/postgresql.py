@@ -44,6 +44,7 @@ class Database:
         CREATE TABLE IF NOT EXISTS Users (
         id SERIAL PRIMARY KEY,
         full_name VARCHAR(255) NOT NULL,
+        invited_user_count BIGINT NULL DEFAULT 0,
         username varchar(255) NULL,
         telegram_id BIGINT NOT NULL UNIQUE 
         );
@@ -60,7 +61,14 @@ class Database:
 
     async def add_user(self, full_name, username, telegram_id):
         sql = "INSERT INTO users (full_name, username, telegram_id) VALUES($1, $2, $3) returning *"
-        return await self.execute(sql, full_name, username, telegram_id, fetchrow=True)
+        res = await self.execute(sql, full_name, username, telegram_id, fetchrow=True)
+        return {
+            "id": res["id"],
+            "full_name": res["full_name"],
+            "username": res["username"],
+            "telegram_id": res["telegram_id"],
+            "invited_user_count": res["invited_user_count"]
+        }
 
     async def select_all_users(self):
         sql = "SELECT * FROM Users"
@@ -69,7 +77,18 @@ class Database:
     async def select_user(self, **kwargs):
         sql = "SELECT * FROM Users WHERE "
         sql, parameters = self.format_args(sql, parameters=kwargs)
-        return await self.execute(sql, *parameters, fetchrow=True)
+        res = await self.execute(sql, *parameters, fetchrow=True)
+        return {
+            "id": res["id"],
+            "full_name": res["full_name"],
+            "username": res["username"],
+            "telegram_id": res["telegram_id"],
+            "invited_user_count": res["invited_user_count"]
+        }
+
+    async def select_full_name_by_id(self, telegram_id):
+        sql = "SELECT full_name FROM Users WHERE telegram_id=$1"
+        return await self.execute(sql, telegram_id, fetchval=True)
 
     async def count_users(self):
         sql = "SELECT COUNT(*) FROM Users"
@@ -84,3 +103,15 @@ class Database:
 
     async def drop_users(self):
         await self.execute("DROP TABLE Users", execute=True)
+
+    async def set_invited_user_count(self, telegram_id):
+        sql = "UPDATE Users SET invited_user_count = invited_user_count + 1 WHERE telegram_id=$1"
+        return await self.execute(sql, telegram_id, execute=True)
+
+    async def select_all_invited_user_count(self):
+        sql = "SELECT invited_user_count, full_name FROM Users ORDER BY invited_user_count DESC"
+        results = await self.execute(sql, fetch=True)
+        return tuple({
+            "invited_user_count": res["invited_user_count"],
+            'full_name': res["full_name"]
+        } for res in results)
